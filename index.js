@@ -26,6 +26,7 @@ var prerender = module.exports = function(req, res, next) {
 
       if(prerenderedResponse){
         res.writeHead(prerenderedResponse.statusCode, prerenderedResponse.headers);
+
         return res.end(prerenderedResponse.body);
       } else {
         next(err);
@@ -169,13 +170,12 @@ prerender.shouldShowPrerenderedPage = function(req) {
   return isRequestingPrerenderedPage;
 };
 
-
 prerender.prerenderServerRequestOptions = {};
 
 prerender.getPrerenderedPageResponse = function(req, callback) {
   var options = {
     uri: url.parse(prerender.buildApiUrl(req)),
-    followRedirect: false,
+    followRedirect: prerender.getPrerenderServiceUrl().includes('api.prerender.com'),
     headers: {}
   };
   for (var attrname in this.prerenderServerRequestOptions) { options[attrname] = this.prerenderServerRequestOptions[attrname]; }
@@ -237,7 +237,6 @@ prerender.plainResponse = function(response, callback) {
   });
 };
 
-
 prerender.buildApiUrl = function(req) {
   var prerenderUrl = prerender.getPrerenderServiceUrl();
   var forwardSlash = prerenderUrl.indexOf('/', prerenderUrl.length - 1) !== -1 ? '' : '/';
@@ -254,7 +253,14 @@ prerender.buildApiUrl = function(req) {
     protocol = this.protocol;
   }
   var fullUrl = protocol + "://" + (this.host || req.headers['x-forwarded-host'] || req.headers['host']) + req.url;
-  return prerenderUrl + forwardSlash + fullUrl;
+
+  // Add some special handling is the passed service URL is prerender.com (which
+  // weirdly, this middleware doesn't know how to work with on its own)
+  if (prerenderUrl.includes('api.prerender.com')) {
+    return `https://api.prerender.com/render?token=${this.prerenderToken || process.env.PRERENDER_TOKEN}&url=${fullUrl}`;
+  } else {
+    return prerenderUrl + forwardSlash + fullUrl;
+  }
 };
 
 prerender.getPrerenderServiceUrl = function() {
